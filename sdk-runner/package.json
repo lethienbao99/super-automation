@@ -1,0 +1,9 @@
+{
+  "name": "superautomation-sdk-runner",
+  "private": true,
+  "type": "module",
+  "description": "Chạy phiên Claude qua Claude Agent SDK cho chế độ xác thực 'API key qua Agent SDK'",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.327"
+  }
+}

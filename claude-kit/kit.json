@@ -1,0 +1,177 @@
+[
+  {
+    "kind": "agent",
+    "name": "vnr-reviewer",
+    "required": true,
+    "note": "B\u01B0\u1EDBc review c\u1EE7a tool g\u1ECDi agent n\u00E0y",
+    "id": "agent/vnr-reviewer"
+  },
+  {
+    "kind": "agent",
+    "name": "vnr-raisetimelog",
+    "required": false,
+    "note": "\u0110\u1EB7t timelog t\u00ECm \u0111i\u1EC3m ngh\u1EBDn",
+    "id": "agent/vnr-raisetimelog"
+  },
+  {
+    "kind": "skill",
+    "name": "hieu-nang-truy-van",
+    "required": true,
+    "note": "ship-check v\u00E0 vnr-reviewer d\u1EABn t\u1EDBi quy t\u1EAFc hi\u1EC7u n\u0103ng DB",
+    "id": "skill/hieu-nang-truy-van"
+  },
+  {
+    "kind": "skill",
+    "name": "ship-check",
+    "required": true,
+    "note": "B\u01B0\u1EDBc code/s\u1EEDa/review ch\u1EA1y ship-check tr\u01B0\u1EDBc khi b\u00E1o xong",
+    "id": "skill/ship-check"
+  },
+  {
+    "kind": "skill",
+    "name": "soat-slop",
+    "required": true,
+    "note": "B\u01B0\u1EDBc review so\u00E1t slop",
+    "id": "skill/soat-slop"
+  },
+  {
+    "kind": "skill",
+    "name": "13-wiki-add-workflow",
+    "required": false,
+    "note": null,
+    "id": "skill/13-wiki-add-workflow"
+  },
+  {
+    "kind": "skill",
+    "name": "apply-qtct-permission",
+    "required": false,
+    "note": "\u00C1p quy\u1EC1n QTCT; vnr-reviewer \u0111\u1ED1i chi\u1EBFu recipe/checklist",
+    "id": "skill/apply-qtct-permission"
+  },
+  {
+    "kind": "skill",
+    "name": "diagnosing-bugs",
+    "required": false,
+    "note": "V\u00F2ng ch\u1EA9n \u0111o\u00E1n l\u1ED7i kh\u00F3",
+    "id": "skill/diagnosing-bugs"
+  },
+  {
+    "kind": "skill",
+    "name": "dich-nguoc-dll",
+    "required": false,
+    "note": "\u0110\u1ECDc DLL d\u00F9ng chung (c\u1EA7n ilspycmd)",
+    "id": "skill/dich-nguoc-dll"
+  },
+  {
+    "kind": "skill",
+    "name": "git-guardrails-claude-code",
+    "required": false,
+    "note": null,
+    "id": "skill/git-guardrails-claude-code"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-cli",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-cli"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-debugging",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-debugging"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-exploring",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-exploring"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-guide",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-guide"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-impact-analysis",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-impact-analysis"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-pr-review",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-pr-review"
+  },
+  {
+    "kind": "skill",
+    "name": "gitnexus-refactoring",
+    "required": false,
+    "note": null,
+    "id": "skill/gitnexus-refactoring"
+  },
+  {
+    "kind": "skill",
+    "name": "grill-me",
+    "required": false,
+    "note": null,
+    "id": "skill/grill-me"
+  },
+  {
+    "kind": "skill",
+    "name": "grilling",
+    "required": false,
+    "note": null,
+    "id": "skill/grilling"
+  },
+  {
+    "kind": "skill",
+    "name": "handoff",
+    "required": false,
+    "note": null,
+    "id": "skill/handoff"
+  },
+  {
+    "kind": "skill",
+    "name": "retro",
+    "required": false,
+    "note": null,
+    "id": "skill/retro"
+  },
+  {
+    "kind": "skill",
+    "name": "tach-man-duyet",
+    "required": false,
+    "note": null,
+    "id": "skill/tach-man-duyet"
+  },
+  {
+    "kind": "skill",
+    "name": "vnr-wiki",
+    "required": false,
+    "note": null,
+    "id": "skill/vnr-wiki"
+  },
+  {
+    "kind": "skill",
+    "name": "vnr-wiki-sync",
+    "required": false,
+    "note": null,
+    "id": "skill/vnr-wiki-sync"
+  },
+  {
+    "kind": "skill",
+    "name": "writing-for-agents",
+    "required": false,
+    "note": null,
+    "id": "skill/writing-for-agents"
+  }
+]

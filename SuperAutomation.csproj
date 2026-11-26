@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SuperAutomation</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dữ liệu job (tài liệu, log, diff) sinh lúc chạy, không phải nguồn của project -->
+    <Content Remove="data\**" />
+    <None Remove="data\**" />
+    <Compile Remove="data\**" />
+    <!-- Bộ chạy Node cho chế độ Agent SDK (node_modules cài bằng npm install trong sdk-runner\) -->
+    <Content Remove="sdk-runner\**" />
+    <None Remove="sdk-runner\**" />
+    <Compile Remove="sdk-runner\**" />
+    <!-- index.cshtml rỗng có sẵn, giao diện nằm ở wwwroot/ -->
+    <Content Remove="index.cshtml" />
+    <None Include="index.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.1" />
+  </ItemGroup>
+
+</Project>

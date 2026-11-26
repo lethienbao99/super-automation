@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SuperAutomation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <script>try {
+    const t = localStorage.getItem('theme'), d = document.documentElement;
+    const base = { light: 'light', dark: 'dark', sakura: 'light', sunset: 'light', summer: 'light', neon: 'dark', starry: 'dark', bamboo: 'dark', ninja: 'dark', saiyan: 'light' }[t];
+    if (base) d.dataset.theme = base;
+    if (base && t !== base) d.dataset.skin = t;
+  } catch { }</script>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">SA</span>
+      <div class="brand-text"><b>SuperAutomation</b><small>AMIS → Code → Review → Test</small></div>
+    </div>
+    <button id="repo" class="repo" type="button" title="Source code — bấm để đổi nhánh">
+      <span class="repo-icon">⎇</span>
+      <span class="repo-text"><b>Đang đọc repo…</b><small></small></span>
+    </button>
+    <div class="spacer"></div>
+    <span id="conn" class="conn" title="Kết nối realtime"></span>
+    <button id="btnDb" class="db-pill" type="button" title="DB đang thao tác — bấm để cấu hình"><span class="db-ic">DB</span><span class="db-text">…</span></button>
+    <button id="btnAuto" class="auto-pill" type="button" title="Chế độ tự động — bấm để cấu hình"><span class="dot"></span><span class="auto-text">Tự động: tắt</span></button>
+    <button id="btnBrief" class="btn ghost" type="button" title="Kết quả các lô chạy hàng loạt / qua đêm — việc cần bạn review">☀ Bản tin <span id="briefBadge" class="count" hidden></span></button>
+    <button id="btnCosts" class="btn ghost" type="button" title="Thống kê chi phí AI theo task, bước, model, key">📊 Chi phí</button>
+    <button id="btnTheme" class="btn ghost icon" type="button" title="Giao diện"></button>
+    <button id="btnSettings" class="btn ghost" type="button" title="Thư mục source, repo, API key Claude, session AMIS">⚙ Cấu hình</button>
+    <div id="me" class="me">
+      <div class="avatar">…</div>
+      <div class="me-text"><b>Đang tải…</b><small></small></div>
+    </div>
+  </header>
+
+  <section id="overview" class="overview" aria-label="Tổng quan"></section>
+  <section id="focus" class="focus" aria-label="Đang chạy và việc cần bạn"></section>
+  <main id="board" class="board" aria-label="Bảng công việc"></main>
+
+  <aside id="drawer" class="drawer" hidden>
+    <div class="drawer-head">
+      <div class="drawer-title"></div>
+      <button class="btn ghost icon" data-close type="button" aria-label="Đóng">✕</button>
+    </div>
+    <div class="drawer-meta"></div>
+    <div class="drawer-flow"></div>
+    <div class="drawer-actions"></div>
+    <div class="drawer-main">
+      <aside class="drawer-tl" aria-label="Các bước của job"></aside>
+      <div class="drawer-right">
+        <nav class="tabs" role="tablist">
+          <button type="button" data-tab="diff">Diff</button>
+          <button type="button" data-tab="test">Test</button>
+          <button type="button" data-tab="chat">Chat</button>
+          <button type="button" data-tab="docs">Tài liệu</button>
+          <button type="button" data-tab="log" hidden>Nhật ký</button>
+        </nav>
+        <section class="drawer-body"></section>
+      </div>
+    </div>
+  </aside>
+
+  <dialog id="dlgStart" class="dlg wide">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head"><b>Giao task cho AI</b><button class="btn ghost icon" value="cancel" aria-label="Đóng">✕</button></div>
+      <div class="dlg-body"></div>
+      <div class="dlg-foot">
+        <button class="btn" id="btnChatTask" type="button" title="Hỏi AI về yêu cầu trước khi giao">💬 Chat về task này</button>
+        <span class="spacer"></span>
+        <button class="btn ghost" value="cancel">Huỷ</button>
+        <button class="btn primary" id="btnStart" value="default" type="button">Giao cho AI</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgSession" class="dlg">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head"><b>Session AMIS</b><button class="btn ghost icon" value="cancel" aria-label="Đóng">✕</button></div>
+      <div class="dlg-body">
+        <p class="muted">Dán giá trị <code>x-sessionid</code> của webapp AMIS Công việc (DevTools → Network → một request bất kỳ tới TaskAPI → Request Headers). Giá trị được lưu ở <code>appsettings.Local.json</code> trên máy này.</p>
+        <input id="inpSession" class="input mono" autocomplete="off" spellcheck="false" placeholder="x-sessionid">
+      </div>
+      <div class="dlg-foot">
+        <button class="btn ghost" value="cancel">Huỷ</button>
+        <button class="btn primary" id="btnSaveSession" type="button">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgSettings" class="dlg wide">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head"><b>Cấu hình</b><button class="btn ghost icon" value="cancel" aria-label="Đóng">✕</button></div>
+      <div class="dlg-body">
+        <fieldset class="group" id="srcGroup">
+          <legend>Source code</legend>
+          <label class="field">
+            <span>Thư mục workspace <small class="muted">— nơi có CLAUDE.md, wiki, skill; Claude chạy trong thư mục này</small></span>
+            <div class="row">
+              <input id="setWorkspace" class="input mono" spellcheck="false" placeholder="D:\Source\hrm-wiki">
+              <button id="btnScanRepos" class="btn" type="button">Quét repo</button>
+            </div>
+            <small id="setWorkspaceInfo" class="muted"></small>
+          </label>
+          <label class="field">
+            <span>Repo chính <small class="muted">— backend HRM9: thanh repo trên cùng, cảnh báo nhánh, site IIS và build khi test theo repo này</small></span>
+            <select id="setRepo" class="input mono"></select>
+            <small id="setRepoPath" class="muted"></small>
+          </label>
+          <div class="field">
+            <span>Repo phụ AI được sửa thêm <small class="muted">— ví dụ frontend Portal v3; mỗi job tạo cùng tên nhánh AI ở mọi repo được chọn</small></span>
+            <div id="setExtraRepos" class="repo-checks"></div>
+          </div>
+          <div class="field">
+            <span>File cấu hình local <small class="muted">— file môi trường luôn sửa trên máy (config.json, Web.config, connection string…): không tính là "chưa commit", không bao giờ commit vào nhánh AI, AI không được sửa</small></span>
+            <div id="setLocalFiles" class="local-files"></div>
+          </div>
+        </fieldset>
+
+        <fieldset class="group" id="procGroup">
+          <legend>Quy trình</legend>
+          <label class="check">
+            <input type="checkbox" id="setAutoCode">
+            <span>Tự chuyển sang code khi AI phân tích thấy yêu cầu đã rõ <small class="muted">— bỏ chọn để task dừng ở cột "Đã rõ yêu cầu" chờ bạn duyệt</small></span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="setAutoApprove">
+            <span>Tự duyệt thay đổi nhỏ <small class="muted" id="autoApproveNote">— chỉ khi review PASS, test PASS, yêu cầu rõ, AI không tự quyết điểm nào, không sửa SQL/config, và ít file, ít dòng. Tool commit vào nhánh AI rồi đánh dấu Đã duyệt — KHÔNG push; bạn vẫn tự push.</small></span>
+          </label>
+          <label class="row" style="gap:8px">
+            <span>Mức review</span>
+            <select id="setReviewMode" class="input" style="flex:1">
+              <option value="auto">Tự động theo rủi ro — đầy đủ (có vnr-reviewer) khi đổi SQL, đụng quyền/menu/luồng duyệt/chuông/mail hoặc diff lớn; còn lại review nhẹ</option>
+              <option value="full">Luôn đầy đủ — mọi task đều chạy vnr-reviewer (tốn hơn ~$4/lượt)</option>
+              <option value="light">Luôn nhẹ — không gọi vnr-reviewer (review nhẹ vẫn tự nâng mức khi thấy đáng ngờ)</option>
+            </select>
+          </label>
+          <label class="row" style="gap:8px">
+            <span>Model reviewer</span>
+            <select id="setReviewerModel" class="input" style="flex:1">
+              <option value="sonnet">Sonnet — rẻ khoảng một nửa Opus; phiên review chính (Opus) vẫn soát lại và chốt kết luận</option>
+              <option value="opus">Opus — kỹ nhất, đắt gấp đôi phần reviewer (~+$2 mỗi lượt review đầy đủ)</option>
+              <option value="">Theo file agent vnr-reviewer.md</option>
+            </select>
+          </label>
+          <small class="muted" id="reviewModeNote" style="display:block;margin:-4px 0 8px">— "diff lớn" = quá 6 file hoặc 150 dòng. Review lại sau vòng sửa luôn chỉ xét phần vừa sửa.</small>
+          <label class="check">
+            <input type="checkbox" id="setPullBefore">
+            <span>Kéo code mới nhất trước khi giao task <small class="muted">— fetch origin rồi fast-forward nhánh bạn đang đứng (HRM9, Portal) trước khi tạo nhánh AI. Nhánh có commit chưa push mà origin cũng có commit mới thì không kéo, chỉ cảnh báo.</small></span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="setConfirmCommit">
+            <span>Chờ tôi xác nhận trước khi commit <small class="muted">— xong pipeline, code AI nằm CHƯA COMMIT trên nhánh AI (web chạy code đó để bạn kiểm tay); bạn bấm "Tạo commit &amp; push" để xem file, sửa message rồi commit/push. Bỏ chọn = tool tự commit vào nhánh AI như trước (không push).</small></span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="setChatWrite">
+            <span>Cho chat tạo file (biên bản test docx, xlsx…) <small class="muted">— chỉ được ghi vào thư mục <code>outputs</code> của task, được chạy python/node để sinh file. Lưu ý: script python/node không bị giới hạn thư mục như tool Write, nên chỉ bật khi cần.</small></span>
+          </label>
+        </fieldset>
+
+        <fieldset class="group" id="claudeGroup">
+          <legend>Claude</legend>
+          <div class="field">
+            <span>Cách xác thực</span>
+            <label class="radio"><input type="radio" name="authMode" value="login"> Tài khoản đang đăng nhập Claude Code <small class="muted">(lệnh <code>claude</code> trên máy này)</small></label>
+            <label class="radio"><input type="radio" name="authMode" value="apikey"> API key Anthropic <small class="muted">(tính phí theo token vào tài khoản API)</small></label>
+            <label class="radio"><input type="radio" name="authMode" value="sdk"> API key qua Agent SDK <small class="muted">(cùng API key ở dưới — dùng khi credit chỉ áp cho "Agent SDK, API", không áp cho Claude Code; cần Node.js)</small></label>
+          </div>
+          <div class="field" id="apiKeyField">
+            <span>API key <small class="muted">— nhiều key thì tool tự xoay tua; key lỗi (hết credit, sai key, chạm giới hạn) được cho tạm nghỉ và chuyển key khác</small></span>
+            <div id="keyList" class="key-list"></div>
+            <div class="row key-add">
+              <input id="newKeyLabel" class="input" maxlength="60" placeholder="Tên key (vd: Ultra Tín)">
+              <input id="setApiKey" class="input mono" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+              <button id="btnToggleKey" class="btn" type="button" title="Hiện/ẩn">👁</button>
+              <button id="btnAddKey" class="btn" type="button">+ Thêm key</button>
+            </div>
+            <label class="row" style="gap:8px">
+              <span>Xoay tua</span>
+              <select id="setKeyStrategy" class="input" style="flex:1">
+                <option value="failover">Dùng lần lượt — dùng key trên cùng, key đó lỗi/hết tiền mới chuyển key sau</option>
+                <option value="roundrobin">Xoay vòng — mỗi phiên AI dùng key kế tiếp (chia đều chi phí)</option>
+              </select>
+            </label>
+            <small id="setApiKeyInfo" class="muted"></small>
+          </div>
+          <label class="field">
+            <span>Model <small class="muted">— dùng cho phân tích, code, review, test và chat (khung chat chọn riêng được)</small></span>
+            <select id="setModel" class="input"></select>
+          </label>
+          <div class="field">
+            <span>Giới hạn chi phí <small class="muted">— USD, 0 = không giới hạn. Chạm trần thì AI dừng, phần đã làm vẫn giữ trên nhánh AI</small></span>
+            <div class="row">
+              <label class="row" style="gap:6px">Mỗi job (phân tích → test) $<input id="setMaxJobCost" class="input mono" type="number" min="0" step="1" style="width:90px"></label>
+              <label class="row" style="gap:6px">Mỗi tin nhắn chat $<input id="setMaxChatCost" class="input mono" type="number" min="0" step="0.5" style="width:90px"></label>
+            </div>
+            <label class="check"><input type="checkbox" id="setCostPaidOnly"> <span>Chỉ áp khi dùng API key / Agent SDK <small class="muted">(bỏ chọn = áp cả với tài khoản đăng nhập, theo chi phí ước tính)</small></span></label>
+          </div>
+          <div class="row">
+            <button id="btnTestClaude" class="btn" type="button">Kiểm tra kết nối</button>
+            <button id="btnTestKeys" class="btn" type="button" title="Gọi thử từng key đang bật (đã lưu) — mỗi key tốn khoảng vài cent">Kiểm tra tất cả key</button>
+            <span id="testClaudeResult" class="muted"></span>
+          </div>
+        </fieldset>
+
+        <fieldset class="group" id="testGroup">
+          <legend>Môi trường test</legend>
+          <div class="muted small">Web IIS chạy thẳng từ thư mục repo, nên sau khi tool build trên nhánh AI, web chạy đúng code AI vừa sửa:</div>
+          <div id="teSites" class="te-sites"></div>
+          <label class="check"><input type="checkbox" id="teBuild"> <span><b>Build các project bị sửa trước bước test</b> <small class="muted">— bằng <code>tools/claude-hooks/stop-build.ps1</code>, kèm project phụ thuộc</small></span></label>
+          <label class="check"><input type="checkbox" id="teRebuild"> <span><b>Build lại trên nhánh của bạn sau khi AI xong</b> <small class="muted">— để web chạy lại code của bạn thay vì DLL của nhánh AI</small></span></label>
+          <div class="field">
+            <span><b>Mức test mặc định</b> <small class="muted">— giao task có thể chọn riêng; chat: "#id làm đi không test" / "chỉ kiểm dữ liệu" / "test đầy đủ"</small></span>
+            <div class="seg te-mode" id="teMode">
+              <label><input type="radio" name="teMode" value="full"> <span><b>Đầy đủ</b><small>Playwright + ảnh + file Word cho QC</small></span></label>
+              <label><input type="radio" name="teMode" value="data"> <span><b>Chỉ kiểm dữ liệu</b><small>DB/API, vẫn sinh test case — rẻ hơn nhiều</small></span></label>
+              <label><input type="radio" name="teMode" value="off"> <span><b>Tắt</b><small>review xong là xong, không test</small></span></label>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="teAutoFix"> <span><b>Tự sửa khi Test FAIL</b> <small class="muted">— có test case FAIL vì lỗi code: AI tái hiện lỗi, sửa, review và test lại (không áp cho task sửa lỗi QC)</small></span></label>
+          <label class="te-budget"><span><b>Số vòng tự sửa tối đa</b> <small class="muted">— từ vòng 2 chỉ chạy khi vòng trước làm GIẢM số test case FAIL; không giảm thì dừng, chờ bạn xem. Mỗi vòng ~$4–5.</small></span>
+            <input id="teFixRounds" class="input sm mono" type="number" min="1" max="5" step="1" style="width:90px"></label>
+          <label class="check"><input type="checkbox" id="teAutoPortal"> <span><b>Tự chạy dev server Portal khi test</b> <small class="muted">— vỏ Portal / module task sửa chưa chạy thì tool tự <code>yarn start…</code> (chỉ cổng đang trống, không đụng server bạn tự chạy), chờ build xong (≤ 6 phút) rồi test. Bật xong để chạy tiếp; tắt bằng chấm "Tool đã bật" ở ô Môi trường.</small></span></label>
+          <label class="check"><input type="checkbox" id="teTempAcc"> <span><b>Cho AI tạo tài khoản test tạm</b> <small class="muted">— kịch bản cần vai trò chưa khai báo (chỉ có 1 quyền, không quyền…): AI tạo user <code>ai.test.&lt;task&gt;.&lt;vai&gt;</code> trên DB test, dùng mật khẩu của tài khoản mặc định, chỉ gán quyền kịch bản cần; xoá bằng script dọn dữ liệu test. Tài khoản đã khai báo bên dưới luôn được ưu tiên.</small></span></label>
+          <label class="te-budget"><span><b>Trần chi phí bước test (USD)</b> <small class="muted">— chạm trần AI dừng test, ghi kết quả đang có; 0 = không giới hạn</small></span>
+            <input id="teBudget" class="input sm mono" type="number" min="0" max="200" step="0.5" style="width:90px"></label>
+          <div class="sub" id="teUiSub">
+            <div class="row wrap">
+              <label class="field inline-field"><span>Web Main</span><input id="teBaseUrl" class="input sm mono" spellcheck="false"></label>
+            </div>
+            <div class="row wrap">
+              <label class="field inline-field"><span>Tài khoản test</span><input id="teUser" class="input sm" autocomplete="off" spellcheck="false"></label>
+              <label class="field inline-field"><span>Mật khẩu</span><input id="tePass" class="input sm" type="password" autocomplete="new-password"></label>
+            </div>
+            <div class="field">
+              <span>Tài khoản thêm <small class="muted">— cho kịch bản cần vai trò khác (người duyệt, quản trị, người được uỷ quyền…). Ghi rõ vai trò để AI chọn đúng tài khoản; mật khẩu không gửi cho AI.</small></span>
+              <div id="teAccounts" class="te-accounts"></div>
+              <div><button type="button" class="btn sm" id="teAccAdd">+ Thêm tài khoản</button></div>
+            </div>
+            <label class="field"><span>Web khác (không qua IIS) <small class="muted">— mỗi dòng "Tên = URL"</small></span>
+              <textarea id="teExtra" class="input sm mono" rows="2" spellcheck="false"></textarea></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="group" id="dbGroup">
+          <legend>DB test</legend>
+          <div id="tdReadDb" class="db-read"></div>
+          <div class="row wrap">
+            <label class="field inline-field"><span>Server</span><input id="tdServer" class="input sm mono" spellcheck="false" placeholder="host,port"></label>
+            <label class="field inline-field"><span>Tên DB</span><input id="tdDatabase" class="input sm mono" spellcheck="false" placeholder="HRM12_XYZ"></label>
+          </div>
+          <div class="row wrap">
+            <label class="field inline-field"><span>Login</span><input id="tdUser" class="input sm" autocomplete="off" spellcheck="false"></label>
+            <label class="field inline-field"><span>Mật khẩu</span><input id="tdPass" class="input sm" type="password" autocomplete="new-password"></label>
+            <label class="check inline"><input type="checkbox" id="tdTrust"> Tin chứng chỉ server</label>
+          </div>
+          <div class="row"><button id="btnTdCheck" class="btn sm" type="button">Kiểm tra kết nối</button><span id="tdCheckResult" class="muted small" style="flex:1"></span></div>
+          <label class="check"><input type="checkbox" id="tdSync"> <span><b>AI đọc DB này</b> <small class="muted">— khi Lưu, tool cập nhật <code>tools/db/ro.local.json</code> (file AI dùng để truy vấn, đã nằm trong .gitignore; bản cũ được sao lưu thành <code>.bak</code>)</small></span></label>
+          <label class="check"><input type="checkbox" id="tdEnabled"> <span><b>Cho tool tạo dữ liệu test thật trong DB này</b> <small class="muted">— AI soạn <code>test-data.sql</code> (chỉ INSERT, đánh dấu <code>AI-TEST-&lt;task&gt;</code>) và <code>test-cleanup.sql</code>; tool kiểm tra script, chạy trong một transaction, tự dọn sau khi test. AI không thấy mật khẩu.</small></span></label>
+          <div class="sub" id="tdSub">
+            <div class="row wrap">
+              <label class="field inline-field"><span>Tối đa số dòng mỗi script</span><input id="tdMaxRows" class="input sm" type="number" min="1" max="100000" style="width:90px"></label>
+            </div>
+            <label class="check"><input type="checkbox" id="tdAnyProject"> <span>DB dùng chung cho mọi dự án <small class="muted">— bỏ chọn thì tool chỉ ghi khi tên DB khớp dự án của task (XYZ ↔ HRM12_XYZ)</small></span></label>
+            <label class="check"><input type="checkbox" id="tdAllowExec"> <span>Cho script gọi stored procedure (EXEC) <small class="muted">— cần khi dữ liệu phải qua SP tính toán; vẫn cấm xp_*, sp_executesql, SQL động</small></span></label>
+            <label class="check"><input type="checkbox" id="tdAiWrite"> <span><b>Cho AI ghi DB test khi test</b> <small class="muted">— cấp quyền cho tài khoản test, chạy Generate, tạo/sửa dữ liệu kịch bản. Qua tool: một transaction mỗi lần, chặn DROP/TRUNCATE/ALTER bảng và sửa store, mọi lần ghi lưu trong db-writes.sql; AI viết sẵn db-undo.sql để bạn bấm Hoàn tác.</small></span></label>
+            <label class="check"><input type="checkbox" id="tdDeploySql"> <span><b>Tự deploy store khi test</b> <small class="muted">— store/function/view nhánh AI sửa (Updates/Stores) được đưa lên DB này trước bước test để web chạy đúng code mới; bản cũ được lưu và tự khôi phục khi Từ chối/Huỷ/Tôi tự làm. DB dùng chung: người khác cũng thấy store mới trong lúc đó.</small></span></label>
+            <label class="check"><input type="checkbox" id="tdKeep"> <span>Không tự dọn dữ liệu test — tôi dọn tay <small class="muted">— giữ dữ liệu sau khi test/duyệt; dọn bằng nút "Dọn dữ liệu test" trong job hoặc tự chạy test-cleanup.sql (script dọn có thể quét bảng lớn, chạy vài phút)</small></span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="group" id="dbProfGroup">
+          <legend>Hồ sơ DB theo dự án</legend>
+          <p class="muted small" style="margin:0 0 8px">Đổi nhánh qua chat (<code>đổi nhánh 1</code>) hoặc <code>dùng db</code> → tool ghi chuỗi kết nối của mẫu VnrConfigTool vào các WebSettings.json (mật khẩu mã hoá giữ nguyên, không giải mã) và chuyển DB của AI sang cùng DB. <b>Login AI</b> là login SQL thường để AI đọc/ghi dữ liệu test — để trống thì dùng login ở mục DB test phía trên.</p>
+          <div class="row wrap">
+            <label class="field inline-field" style="flex:1"><span>Thư mục mẫu VnrConfigTool</span><input id="dpDir" class="input sm mono" spellcheck="false"></label>
+          </div>
+          <div id="dpCurrent" class="muted small"></div>
+          <div id="dpRows" class="dp-rows"></div>
+          <div class="row"><button id="btnDpAdd" class="btn sm" type="button">＋ Thêm dự án</button></div>
+        </fieldset>
+
+        <fieldset class="group" id="autoGroup">
+          <legend>Tự động</legend>
+          <label class="check">
+            <input type="checkbox" id="apEnabled">
+            <span><b>Tự làm mới danh sách task</b> từ AMIS theo chu kỳ
+              <select id="apInterval" class="input sm inline">
+                <option value="5">5 phút</option><option value="10">10 phút</option><option value="15">15 phút</option>
+                <option value="30">30 phút</option><option value="60">1 giờ</option><option value="120">2 giờ</option>
+              </select>
+            </span>
+          </label>
+          <div class="sub" id="apSub">
+            <div class="row wrap">
+              <span class="muted">Theo dõi:</span>
+              <label class="check inline"><input type="checkbox" name="apType" value="TotalTaskDue"> Đến hạn hôm nay</label>
+              <label class="check inline"><input type="checkbox" name="apType" value="TotalTaskDueSoon"> Sắp đến hạn</label>
+              <label class="check inline"><input type="checkbox" name="apType" value="TotalTaskExpire"> Quá hạn</label>
+            </div>
+            <label class="check">
+              <input type="checkbox" id="apAnalyze">
+              <span><b>Tự giao task mới cho AI phân tích yêu cầu</b> <small class="muted">— chỉ đọc, không sửa code; mỗi task tốn khoảng $0.5–2. Task đã từng giao (kể cả đã huỷ) không bị giao lại.</small></span>
+            </label>
+            <div class="sub" id="apAnalyzeSub">
+              <label class="check"><input type="checkbox" id="apMatchBranch"> <span>Chỉ task thuộc dự án khớp nhánh repo hiện tại <small class="muted">(khuyên dùng)</small></span></label>
+              <div class="row wrap">
+                <label class="field inline-field"><span>Chỉ các dự án</span>
+                  <input id="apProjects" class="input sm mono" placeholder="trống = mọi dự án, ví dụ: DEF, ABC" spellcheck="false"></label>
+                <label class="field inline-field"><span>Tối đa mỗi lượt</span>
+                  <input id="apMax" class="input sm" type="number" min="1" max="20" style="width:70px"></label>
+              </div>
+              <div class="muted small">Sau khi phân tích, task dừng ở "Đã rõ yêu cầu" chờ bạn bấm code — trừ khi bật "Tự chuyển sang code" ở mục Source code.</div>
+            </div>
+          </div>
+          <div class="row">
+            <span class="muted small" id="apStatus" style="flex:1"></span>
+            <button id="btnApRun" class="btn sm" type="button" title="Làm mới (và tự giao nếu đã bật) ngay bây giờ, theo cấu hình ĐÃ LƯU">Chạy ngay</button>
+          </div>
+          <details class="ap-log"><summary>Nhật ký tự động</summary><div id="apLog"></div></details>
+        </fieldset>
+
+        <fieldset class="group" id="kitGroup">
+          <legend>Skill</legend>
+          <div class="small muted">Bộ skill/agent HRM đi kèm tool. Prompt của tool gọi tới các mục <b>bắt buộc</b> — thiếu thì bước code/review yếu hẳn (AI không có checklist để làm theo).</div>
+          <div class="row" style="margin-top:8px">
+            <span>Cài vào</span>
+            <select id="kitTarget" class="input sm" style="width:auto">
+              <option value="user">Máy này — %USERPROFILE%\.claude (khuyên dùng)</option>
+              <option value="project">Workspace — .claude trong thư mục workspace (đi theo repo)</option>
+            </select>
+            <span class="spacer"></span>
+            <button id="btnKitInstall" class="btn sm primary" type="button">Cài mục còn thiếu</button>
+            <button id="btnKitUpdate" class="btn sm" type="button" title="Ghi đè bản đang cài bằng bản trong bộ cài (bản cũ được sao lưu)">Cập nhật tất cả</button>
+          </div>
+          <div id="kitBody"><div class="muted">Đang tải…</div></div>
+        </fieldset>
+
+        <fieldset class="group" id="chatBotGroup">
+          <legend>AMIS Chat</legend>
+          <div class="small muted">Bot nhắn vào một nhóm AMIS Chat (dưới tên tài khoản AMIS của bạn) khi AI cần bạn xác nhận, khi lô chạy hàng loạt xong, khi job lỗi —
+            và nhận câu trả lời ngay trong nhóm đó, kể cả từ điện thoại. Chỉ nhận lệnh do chính bạn gửi trong đúng nhóm này. Duyệt &amp; push vẫn làm trong tool.</div>
+          <div class="field" style="margin-top:8px">
+            <span>Nhóm chat <small class="muted">— tạo một nhóm chỉ có bạn, mở nhóm trên web rồi dán link (https://amisapp.misa.vn/chat/cv/…)</small></span>
+            <input id="cbConv" class="input" placeholder="https://amisapp.misa.vn/chat/cv/6afe…">
+            <div id="cbName" class="small"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="cbEnabled"><span><b>Bật bot</b></span></label>
+          <div class="small muted" style="margin:6px 0 2px">Nhắn khi:</div>
+          <label class="check"><input type="checkbox" id="cbAsk"><span>AI cần bạn xác nhận / bổ sung yêu cầu <small class="muted">— kèm câu hỏi và phương án đề xuất</small></span></label>
+          <label class="check"><input type="checkbox" id="cbBatch"><span>Lô chạy hàng loạt xong <small class="muted">— tóm tắt kiểu Bản tin</small></span></label>
+          <label class="check"><input type="checkbox" id="cbDone"><span>Task chạy lẻ xong, chờ duyệt</span></label>
+          <label class="check"><input type="checkbox" id="cbFail"><span>Job lỗi (sau khi đã tự thử lại)</span></label>
+          <div class="row" style="margin-top:8px">
+            <button id="btnCbSave" class="btn sm primary" type="button">Lưu</button>
+            <button id="btnCbTest" class="btn sm" type="button">Gửi tin thử</button>
+            <span id="cbStatus" class="small muted"></span>
+          </div>
+          <pre class="small" style="white-space:pre-wrap;margin-top:8px">Trả lời trong nhóm (mỗi lệnh một tin):
+#5001001 1: A, 2: đồng ý   → câu trả lời cho AI
+#5001001 ok                → làm theo phương án AI đề xuất
+#5001001 dừng              → huỷ job
+#5001001 duyệt             → duyệt job chờ duyệt (commit nhánh AI, KHÔNG push)
+#5001001 sửa &lt;yêu cầu&gt;     → AI sửa thêm rồi review/test lại
+#5001001 từ chối &lt;lý do&gt;   → từ chối, AI rút kinh nghiệm
+?                        → xem các job đang mở
+#4256244 làm đi            → giao task cho AI (tự commit vào nhánh AI riêng, không push)
+#4256244 làm qua đêm       → giao, AI không dừng hỏi
+mai có task gì / task quá hạn → hỏi lịch task trên AMIS
+(Chỉ có một task đang chờ thì không cần ghi mã task.)</pre>
+        </fieldset>
+
+        <fieldset class="group" id="tfsGroup">
+          <legend>TFS</legend>
+          <div class="small muted">Tạo Pull Request trên TFS khi bạn bấm <b>Duyệt &amp; push</b> (hoặc "Tạo commit &amp; push"). Tiêu đề theo chuẩn <code>[ID TASK] - Mô tả</code>, mô tả lấy từ pr.md AI viết lúc review.
+            Đích PR là nhánh bạn đang đứng lúc giao task; task nối nhánh thì đích là nhánh của task trước. Địa chỉ TFS tự lấy từ remote origin của từng repo.</div>
+          <label class="check" style="margin-top:8px">
+            <input type="checkbox" id="tfsAutoPr">
+            <span>Tự tạo PR sau khi push <small class="muted">— bỏ chọn thì bấm "Tạo PR" trong từng job khi cần</small></span>
+          </label>
+          <div class="field" style="margin-top:8px">
+            <span>Personal Access Token (tuỳ chọn) <small class="muted">— để trống thì dùng đăng nhập Windows của máy (máy trong domain thường dùng được luôn). Cần khi máy ngoài domain hoặc TFS từ chối.
+              Tạo ở TFS: avatar › Security › Personal access tokens › Add, scope <b>Code (read and write)</b>.</small></span>
+            <div class="row">
+              <input type="password" id="tfsPat" class="input" autocomplete="off" style="flex:1" placeholder="Chưa có PAT — đang dùng đăng nhập Windows">
+              <button id="btnTfsSave" class="btn sm primary" type="button">Lưu PAT</button>
+              <button id="btnTfsClear" class="btn sm" type="button" title="Xoá PAT, quay về dùng đăng nhập Windows">Xoá</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btnTfsTest" class="btn sm" type="button">Kiểm tra kết nối</button>
+            <span class="small muted">Lưu ở appsettings.Local.json, không gửi lên giao diện (chỉ hiện dạng che).</span>
+          </div>
+          <div id="tfsResult" class="small" style="margin-top:6px"></div>
+        </fieldset>
+
+        <fieldset class="group" id="lessonGroup">
+          <legend>Bài học</legend>
+          <div class="small muted">Lưu ý gắn vào prompt mọi bước code / sửa / review của các task sau, để AI không lặp lại lỗi bạn đã nhắc.
+            Mỗi lần bạn "Yêu cầu AI sửa" hoặc từ chối kèm lý do, nội dung được gom vào mục <b>Gợi ý chờ duyệt</b> — viết lại thành quy tắc chung (bỏ chi tiết riêng của task) rồi lưu.</div>
+          <div class="row" style="margin-top:8px;align-items:flex-start">
+            <textarea id="lessonNew" class="input" rows="2" style="flex:1" placeholder="Ví dụ: Store lưới phải lọc theo quyền QTCT (Get_Data_Permission_Fill), không dùng Get_Data_Permission_New"></textarea>
+            <button id="btnLessonAdd" class="btn sm primary" type="button">Thêm</button>
+          </div>
+          <div id="lessonBody"><div class="muted">Đang tải…</div></div>
+        </fieldset>
+
+        <fieldset class="group" id="amisGroup">
+          <legend>AMIS</legend>
+          <div class="row">
+            <span class="muted" id="setAmisInfo" style="flex:1"></span>
+            <button id="btnSession" class="btn" type="button">Đổi session AMIS</button>
+          </div>
+        </fieldset>
+        <p class="muted small">Lưu ở <code>appsettings.Local.json</code> trên máy này (không commit). API key được lưu dạng văn bản — chỉ dùng trên máy cá nhân.</p>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn ghost" value="cancel">Đóng</button>
+        <button class="btn primary" id="btnSaveSettings" type="button">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgCosts" class="dlg wide costs-dlg">
+    <div class="dlg-inner">
+      <div class="dlg-head"><b>Thống kê chi phí &amp; thời gian</b><button class="btn ghost icon" type="button" onclick="this.closest('dialog').close()" aria-label="Đóng">✕</button></div>
+      <div class="dlg-body">
+        <div class="cs-toolbar">
+          <div class="cs-tabs" id="costTabs">
+            <button type="button" data-v="overview">📊 Tổng quan</button><button type="button" data-v="tasks">🗂 Theo task</button><button type="button" data-v="time">⏱ Thời gian</button>
+          </div>
+          <div class="cs-filters">
+            <label class="cs-filter"><span>Khoảng</span>
+              <span class="cs-seg" id="costDays"><button type="button" data-v="1">Hôm nay</button><button type="button" data-v="7">7 ngày</button><button type="button" data-v="30">30 ngày</button><button type="button" data-v="0">Tất cả</button></span>
+            </label>
+            <label class="cs-filter" id="costPaidWrap"><span>Loại phí</span>
+              <span class="cs-seg" id="costPaid"><button type="button" data-v="all">Tất cả</button><button type="button" data-v="paid">Tiền thật</button><button type="button" data-v="est">Ước tính</button></span>
+            </label>
+          </div>
+        </div>
+        <div id="costsBody"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgBranch" class="dlg wide">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head"><b>Source code</b><button class="btn ghost icon" value="cancel" aria-label="Đóng">✕</button></div>
+      <div class="dlg-body">
+        <div id="repoDetail"></div>
+        <div class="branch-tools">
+          <input id="inpBranch" class="input" placeholder="Tìm nhánh…" autocomplete="off" spellcheck="false">
+          <button id="btnFetch" class="btn" type="button" title="git fetch --prune origin">Cập nhật từ remote</button>
+        </div>
+        <div class="seg" id="branchFilter">
+          <button type="button" data-f="local" class="active">Local</button>
+          <button type="button" data-f="remote">Remote</button>
+          <button type="button" data-f="ai">Nhánh AI</button>
+        </div>
+        <div id="branchList" class="branch-list"></div>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

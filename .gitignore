@@ -1,0 +1,24 @@
+bin/
+obj/
+data/
+.vs/
+# Chứa x-sessionid AMIS — không commit
+appsettings.Local.json
+node_modules/
+*.user
+*.suo
+# Bản sao cấu hình local / file tạm có thể chứa bí mật
+appsettings.*.Local.json
+*.bak
+# Tài liệu/skill nội bộ công ty — chỉ giữ ở máy, không đưa lên repo public
+standards/
+claude-kit/agents/
+claude-kit/skills/13-wiki-add-workflow/
+claude-kit/skills/apply-qtct-permission/
+claude-kit/skills/dich-nguoc-dll/
+claude-kit/skills/hieu-nang-truy-van/
+claude-kit/skills/ship-check/
+claude-kit/skills/soat-slop/
+claude-kit/skills/tach-man-duyet/
+claude-kit/skills/vnr-wiki/
+claude-kit/skills/vnr-wiki-sync/
