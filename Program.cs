@@ -663,6 +663,35 @@ api.MapPost("/kit/install", (KitBody body, SkillKit kit) =>
 });
 api.MapPost("/kit/export", (KitBody body, SkillKit kit) =>
     body.Ids is { Count: > 0 } ids ? Results.Ok(new { done = kit.Export(ids) }) : Results.BadRequest(new { error = "Chưa chọn mục nào." }));
+// Gói .zip để chuyển skill/agent nội bộ (bị .gitignore, không có trên repo) sang máy khác
+api.MapGet("/kit/package", (string? ids, bool? standards, SkillKit kit) =>
+{
+    var list = (ids ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    if (list.Count == 0 && standards != true) return Results.BadRequest(new { error = "Chưa chọn mục nào." });
+    // ids rỗng = Pick lấy hết → chỉ xuất standards thì truyền một id không tồn tại
+    var bytes = kit.Package(list.Count > 0 ? list : ["-"], standards == true);
+    return Results.File(bytes, "application/zip", $"claude-kit-{DateTime.Now:yyyyMMdd-HHmm}.zip");
+});
+api.MapPost("/kit/package", async (HttpRequest req, SkillKit kit) =>
+{
+    if (!req.HasFormContentType) return Results.BadRequest(new { error = "Chưa gửi file .zip." });
+    var form = await req.ReadFormAsync();
+    if (form.Files.FirstOrDefault() is not { Length: > 0 } file) return Results.BadRequest(new { error = "Chưa gửi file .zip." });
+    if (file.Length > 50L * 1024 * 1024) return Results.BadRequest(new { error = "File quá 50 MB." });
+    using var s = new MemoryStream();
+    await file.CopyToAsync(s);
+    // Chữ ký zip "PK\x03\x04" (hoặc "PK\x05\x06" cho zip rỗng) — file khác thì ZipArchive ném lỗi khó hiểu
+    var buf = s.GetBuffer();
+    if (s.Length < 22 || buf[0] != 'P' || buf[1] != 'K') return Results.BadRequest(new { error = "File không phải zip hợp lệ." });
+    s.Position = 0;
+    try
+    {
+        var r = kit.ImportPackage(s);
+        return Results.Ok(new { done = r.Done, standards = r.Standards, backup = r.Backup });
+    }
+    catch (PipelineException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException) { return Results.BadRequest(new { error = "File zip bị hỏng." }); }
+});
 api.MapPost("/kit/remove", (KitBody body, SkillKit kit) =>
     body.Ids is [var id] && kit.Remove(id) ? Results.Ok(new { ok = true }) : Results.BadRequest(new { error = "Không bỏ được (mục bắt buộc hoặc không có trong bộ cài)." }));
 

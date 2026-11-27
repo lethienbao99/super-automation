@@ -141,6 +141,13 @@
   },
   {
     "kind": "skill",
+    "name": "portal-e2e",
+    "required": false,
+    "note": null,
+    "id": "skill/portal-e2e"
+  },
+  {
+    "kind": "skill",
     "name": "retro",
     "required": false,
     "note": null,

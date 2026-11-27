@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -129,7 +130,7 @@ public sealed partial class SkillKit(IWebHostEnvironment env, SettingsService se
             foreach (var f in Directory.GetFiles(agentsDir, "*.md"))
                 if (!known.Contains("agent/" + Path.GetFileNameWithoutExtension(f)))
                     local.Add(new { id = "agent/" + Path.GetFileNameWithoutExtension(f), kind = "agent", name = Path.GetFileNameWithoutExtension(f), description = Describe(f) });
-        return new { target, home, kitDir = KitDir, items = list, local };
+        return new { target, home, kitDir = KitDir, items = list, local, privateIds = PrivateIds(), standards = StandardsFiles().Count, standardsPrivate = StandardsPrivate() };
     }
 
     /// <summary>Dòng description trong frontmatter.</summary>
@@ -227,6 +228,166 @@ public sealed partial class SkillKit(IWebHostEnvironment env, SettingsService se
             }
             SaveManifest(items);
             return done;
+        }
+    }
+
+    // ---------- Gói .zip: chuyển skill/agent nội bộ (không có trên git) giữa các máy ----------
+
+    private string StandardsDir => Path.Combine(env.ContentRootPath, "standards");
+    private const long MaxPackageBytes = 50L * 1024 * 1024;
+    private const int MaxPackageEntries = 3000;
+
+    /// <summary>Các mục có file nằm ngoài git (bị .gitignore) — người clone repo sẽ không có, cần chuyển bằng gói.</summary>
+    public HashSet<string> PrivateIds()
+    {
+        var tracked = GitTracked(env.ContentRootPath, "claude-kit");
+        var res = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var it in Manifest())
+        {
+            var files = FilesOf(KitDir, it);
+            // Không đọc được git → coi như nội bộ hết (chọn sẵn nhiều hơn còn hơn bỏ sót)
+            if (files.Count > 0 && (tracked is null || files.Any(f => !tracked.Contains(Fwd(Path.Combine("claude-kit", f))))))
+                res.Add(it.Id);
+        }
+        return res;
+    }
+
+    /// <summary>Thư mục standards/ có file nào ngoài git không.</summary>
+    public bool StandardsPrivate()
+    {
+        var files = StandardsFiles();
+        if (files.Count == 0) return false;
+        var tracked = GitTracked(env.ContentRootPath, "standards");
+        return tracked is null || files.Any(f => !tracked.Contains("standards/" + f));
+    }
+
+    private List<string> StandardsFiles() =>
+        Directory.Exists(StandardsDir)
+            ? Directory.GetFiles(StandardsDir).Select(Path.GetFileName).OfType<string>().Where(n => SafeName().IsMatch(n)).OrderBy(n => n).ToList()
+            : [];
+
+    private static HashSet<string>? GitTracked(string repo, string path)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = repo, RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+            foreach (var a in new[] { "ls-files", "-z", "--", path }) psi.ArgumentList.Add(a);
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null) return null;
+            var o = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(10000);
+            return p.ExitCode == 0 ? o.Split('\0', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase) : null;
+        }
+        catch (System.ComponentModel.Win32Exception) { return null; } // máy không có git
+    }
+
+    /// <summary>
+    /// Đóng gói các mục đã chọn (nội dung trong bộ cài, đường dẫn ~/.claude đã ở dạng {{CLAUDE_HOME}}) + kit.json tương ứng
+    /// (+ standards/ nếu chọn) thành file zip.
+    /// </summary>
+    public byte[] Package(IEnumerable<string> ids, bool withStandards)
+    {
+        var items = Pick(ids).Where(i => FilesOf(KitDir, i).Count > 0).ToList();
+        using var ms = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var man = zip.CreateEntry("kit.json");
+            using (var w = man.Open())
+                w.Write(new UTF8Encoding(false).GetBytes(JsonSerializer.Serialize(items, new JsonSerializerOptions(EventHub.Json) { WriteIndented = true })));
+            foreach (var it in items)
+                foreach (var f in FilesOf(KitDir, it))
+                    zip.CreateEntryFromFile(Path.Combine(KitDir, f), Fwd(f));
+            if (withStandards)
+                foreach (var f in StandardsFiles())
+                    zip.CreateEntryFromFile(Path.Combine(StandardsDir, f), "standards/" + f);
+        }
+        return ms.ToArray();
+    }
+
+    public sealed record ImportResult(List<string> Done, List<string> Standards, string? Backup);
+
+    /// <summary>
+    /// Nhập gói zip do <see cref="Package"/> tạo: ghi skill/agent vào claude-kit/, file chuẩn vào standards/, gộp kit.json.
+    /// Chỉ nhận đường dẫn skills/{tên}/…, agents/{tên}.md, standards/{file} của các mục có trong kit.json của gói;
+    /// bản cũ bị thay được sao lưu vào data/kit-backup/. Gói sai cấu trúc → PipelineException, không ghi gì.
+    /// </summary>
+    public ImportResult ImportPackage(Stream zipStream)
+    {
+        using var zip = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Read);
+        var entries = zip.Entries.Where(e => !e.FullName.EndsWith('/')).ToList();
+        if (entries.Count > MaxPackageEntries) throw new PipelineException($"Gói có quá nhiều file ({entries.Count}).");
+        if (entries.Sum(e => e.Length) > MaxPackageBytes) throw new PipelineException("Gói giải nén quá 50 MB.");
+        var manEntry = entries.FirstOrDefault(e => e.FullName == "kit.json")
+            ?? throw new PipelineException("Không phải gói skill của tool (thiếu kit.json ở gốc file zip).");
+        List<KitItem> incoming;
+        try
+        {
+            using var r = new StreamReader(manEntry.Open(), Encoding.UTF8);
+            incoming = JsonSerializer.Deserialize<List<KitItem>>(r.ReadToEnd(), EventHub.Json) ?? [];
+        }
+        catch (JsonException ex) { throw new PipelineException("kit.json trong gói bị hỏng: " + ex.Message); }
+        incoming = incoming.Where(i => i.Kind is "skill" or "agent" && SafeName().IsMatch(i.Name)).ToList();
+        var ids = incoming.Select(i => i.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Kiểm tra hết trước khi ghi: mỗi file phải thuộc một mục trong kit.json của gói (hoặc standards/)
+        var plan = new List<(System.IO.Compression.ZipArchiveEntry Entry, string Dest, string? Id)>();
+        foreach (var e in entries)
+        {
+            if (e == manEntry) continue;
+            var parts = e.FullName.Replace('\\', '/').Split('/');
+            if (parts.Any(p => p is "" or "." or ".." || p.Contains(':')))
+                throw new PipelineException($"Đường dẫn không hợp lệ trong gói: {e.FullName}");
+            string? id; string dest;
+            switch (parts)
+            {
+                case ["skills", var n, .. var rest] when rest.Length > 0 && ids.Contains("skill/" + n):
+                    id = "skill/" + n; dest = Path.Combine(KitDir, "skills", n, Path.Combine(rest)); break;
+                case ["agents", var f] when f.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && ids.Contains("agent/" + f[..^3]):
+                    id = "agent/" + f[..^3]; dest = Path.Combine(KitDir, "agents", f); break;
+                case ["standards", var f] when SafeName().IsMatch(f):
+                    id = null; dest = Path.Combine(StandardsDir, f); break;
+                default:
+                    throw new PipelineException($"File lạ trong gói (không thuộc mục nào trong kit.json): {e.FullName}");
+            }
+            var full = Path.GetFullPath(dest);
+            var root = Path.GetFullPath(id is null ? StandardsDir : KitDir) + Path.DirectorySeparatorChar;
+            if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new PipelineException($"Đường dẫn ra ngoài thư mục: {e.FullName}");
+            plan.Add((e, full, id));
+        }
+        var withFiles = plan.Where(p => p.Id is not null).Select(p => p.Id!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (plan.Count == 0) throw new PipelineException("Gói không có skill/agent hay file chuẩn nào.");
+
+        lock (_lock)
+        {
+            var backup = Path.GetFullPath(Path.Combine(env.ContentRootPath, settings.Pipeline.DataDir, "kit-backup", DateTime.Now.ToString("yyyyMMdd-HHmmss")));
+            var backedUp = false;
+            void Backup(string file, string rel)
+            {
+                if (!File.Exists(file)) return;
+                var dst = Path.Combine(backup, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
+                File.Copy(file, dst, overwrite: true);
+                backedUp = true;
+            }
+            var items = Manifest();
+            foreach (var it in incoming.Where(i => withFiles.Contains(i.Id)))
+            {
+                var old = items.FirstOrDefault(i => i.Id.Equals(it.Id, StringComparison.OrdinalIgnoreCase));
+                foreach (var f in old is null ? FilesOf(KitDir, it) : FilesOf(KitDir, old)) Backup(Path.Combine(KitDir, f), Path.Combine("claude-kit", f));
+                // Skill: thay cả thư mục để không sót file cũ đã bị xoá trong bản mới
+                if (it.Kind == "skill") { var d = Path.Combine(KitDir, "skills", it.Name); if (Directory.Exists(d)) Directory.Delete(d, recursive: true); }
+                if (old is not null) items.Remove(old);
+                items.Add(it);
+            }
+            var stds = new List<string>();
+            foreach (var (e, dest, id) in plan)
+            {
+                if (id is null) { Backup(dest, Path.Combine("standards", Path.GetFileName(dest))); stds.Add(Path.GetFileName(dest)); }
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                e.ExtractToFile(dest, overwrite: true);
+            }
+            SaveManifest(items);
+            return new(withFiles.OrderBy(x => x).ToList(), stds, backedUp ? backup : null);
         }
     }
 

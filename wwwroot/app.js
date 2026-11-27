@@ -652,27 +652,41 @@ async function portalAction(x) {
 }
 // Popup chọn nhiều module Portal để bật (checkbox + Chọn hết/Bỏ hết, đếm RAM ước tính). Trả mảng tên hoặc null khi Huỷ.
 function pickPortalModules(list) {
+  return pickList({
+    icon: '▶', title: 'Bật module Portal', ok: 'Bật',
+    text: 'Chọn các module đang tắt cần bật. Build lần đầu 2–5 phút, mỗi module ~1–2 GB RAM.',
+    items: list.map(p => ({ value: p, label: p })),
+    note: n => n ? `Đã chọn ${n} module · cần khoảng ${n}–${n * 2} GB RAM` : 'Chưa chọn module nào',
+  });
+}
+
+/**
+ * Popup chọn nhiều mục. opts: { icon, title, text, ok, items: [{ value, label, sub?, checked? }], note: n => chuỗi }.
+ * Trả mảng value đã chọn, hoặc null nếu bấm Huỷ.
+ */
+function pickList(opts) {
   return new Promise(resolve => {
-    const boxes = list.map(p => h('input', { type: 'checkbox', value: p }));
+    const boxes = opts.items.map(it => h('input', { type: 'checkbox', value: it.value, checked: !!it.checked }));
     const note = h('p', { class: 'ask-text pm-note' });
+    const okBtn = h('button', { class: 'btn primary', value: 'ok', type: 'submit' }, opts.ok || 'OK');
     const update = () => {
       const n = boxes.filter(b => b.checked).length;
-      note.textContent = n ? `Đã chọn ${n} module · cần khoảng ${n}–${n * 2} GB RAM` : 'Chưa chọn module nào';
+      note.textContent = opts.note ? opts.note(n) : n ? `Đã chọn ${n} mục` : 'Chưa chọn mục nào';
       okBtn.disabled = !n;
     };
     const setAll = v => { boxes.forEach(b => { b.checked = v; }); update(); };
-    const okBtn = h('button', { class: 'btn primary', value: 'ok', type: 'submit' }, 'Bật');
     const dlg = h('dialog', { class: 'dlg ask-dlg' },
       h('form', { method: 'dialog', class: 'dlg-inner' },
         h('div', { class: 'ask-body' },
-          h('div', { class: 'ask-ic' }, '▶'),
+          h('div', { class: 'ask-ic' }, opts.icon || '☑'),
           h('div', { class: 'ask-main' },
-            h('div', { class: 'ask-title' }, 'Bật module Portal'),
-            h('p', { class: 'ask-text' }, 'Chọn các module đang tắt cần bật. Build lần đầu 2–5 phút, mỗi module ~1–2 GB RAM.'),
+            h('div', { class: 'ask-title' }, opts.title),
+            opts.text ? h('p', { class: 'ask-text' }, opts.text) : null,
             h('div', { class: 'pm-tools' },
               h('button', { class: 'btn sm ghost', type: 'button', onclick: () => setAll(true) }, 'Chọn hết'),
               h('button', { class: 'btn sm ghost', type: 'button', onclick: () => setAll(false) }, 'Bỏ hết')),
-            h('div', { class: 'pm-list' }, ...boxes.map(b => h('label', { class: 'pm-item' }, b, h('span', {}, b.value)))),
+            h('div', { class: 'pm-list' }, ...boxes.map((b, i) => h('label', { class: 'pm-item' }, b,
+              h('span', {}, opts.items[i].label, opts.items[i].sub ? h('small', { class: 'muted' }, ' ', opts.items[i].sub) : null)))),
             note)),
         h('div', { class: 'dlg-foot' },
           h('button', { class: 'btn ghost', value: 'cancel', type: 'submit' }, 'Huỷ bỏ'),
@@ -3235,13 +3249,16 @@ async function loadKit() {
   if (!box) return;
   let v;
   try { v = await api('/kit?target=' + $('#kitTarget').value); } catch (e) { box.replaceChildren(h('div', { class: 'bad-text' }, e.message)); return; }
+  KIT.view = v;
+  const priv = new Set(v.privateIds || []);
   const fmt = d => d ? new Date(d).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
   const row = it => {
     const [cls, label] = KIT_STATUS[it.status] || ['', it.status];
     return h('tr', {},
       h('td', {},
         h('div', {}, h('span', { class: 'chip' }, it.kind === 'agent' ? 'agent' : 'skill'), ' ', h('b', { class: 'mono' }, it.name),
-          it.required ? h('span', { class: 'chip fail', title: 'Prompt của tool gọi tới mục này' }, 'bắt buộc') : null),
+          it.required ? h('span', { class: 'chip fail', title: 'Prompt của tool gọi tới mục này' }, 'bắt buộc') : null,
+          priv.has(it.id) ? h('span', { class: 'chip', title: 'Không có trên git (bị .gitignore) — chuyển sang máy khác bằng 📦 Xuất gói' }, 'nội bộ') : null),
         it.note ? h('div', { class: 'small' }, it.note) : null,
         it.description ? h('div', { class: 'small muted kit-desc', title: it.description }, it.description) : null),
       h('td', {}, h('span', { class: 'chip ' + cls }, label),
@@ -3253,8 +3270,11 @@ async function loadKit() {
         !it.required ? h('button', { class: 'btn ghost sm', type: 'button', title: 'Bỏ khỏi bộ cài (không xoá bản đã cài trên máy)', onclick: () => kitRemove(it) }, '✕') : null));
   };
   const missingReq = v.items.filter(i => i.required && i.status === 'missing');
+  const emptyItems = v.items.filter(i => i.status === 'empty');
   box.replaceChildren(
-    h('div', { class: 'small muted', style: 'margin:6px 0' }, 'Thư mục đích: ', h('code', {}, v.home), ' · Bộ cài: ', h('code', {}, v.kitDir)),
+    h('div', { class: 'small muted', style: 'margin:6px 0' }, 'Thư mục đích: ', h('code', {}, v.home), ' · Bộ cài: ', h('code', {}, v.kitDir),
+      ` · Chuẩn công ty (standards/): ${v.standards ? v.standards + ' file' : 'chưa có'}`),
+    emptyItems.length ? h('div', { class: 'errbox' }, `${emptyItems.length} mục chưa có file trong bộ cài (${emptyItems.map(i => i.name).join(', ')}) — thường do clone từ git: xin gói .zip từ người đang dùng rồi bấm "📥 Nhập gói".`) : null,
     missingReq.length ? h('div', { class: 'errbox' }, `Thiếu ${missingReq.length} mục bắt buộc: ${missingReq.map(i => i.name).join(', ')} — bấm "Cài mục còn thiếu".`) : null,
     h('table', { class: 'kit-table' }, h('tbody', {}, v.items.map(row))),
     v.local.length ? h('details', { class: 'kit-local' },
@@ -3280,6 +3300,43 @@ async function kitExport(ids) {
   try {
     const r = await api('/kit/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
     toast(`Đã cập nhật bộ cài: ${r.done.join(', ') || 'không có gì'}`);
+  } catch (e) { toast(e.message, true); }
+  loadKit();
+}
+
+const KIT = { view: null };
+
+/** Xuất gói .zip các skill/agent (mặc định chọn sẵn mục nội bộ — không có trên git) + standards/. */
+async function kitPackage() {
+  const v = KIT.view;
+  if (!v) return;
+  const priv = new Set(v.privateIds || []);
+  const items = v.items.filter(i => i.status !== 'empty').map(i => ({
+    value: i.id, label: i.name, sub: `${i.kind}${i.required ? ' · bắt buộc' : ''}${priv.has(i.id) ? ' · nội bộ' : ''}`, checked: priv.has(i.id),
+  }));
+  if (v.standards) items.unshift({ value: '@standards', label: 'standards/', sub: `chuẩn PR/commit công ty · ${v.standards} file${v.standardsPrivate ? ' · nội bộ' : ''}`, checked: !!v.standardsPrivate });
+  const picked = await pickList({
+    icon: '📦', title: 'Xuất gói skill', ok: 'Tải .zip', items,
+    text: 'Đóng gói để gửi cho đồng nghiệp (Teams/mail nội bộ). Mục "nội bộ" không có trên git nên được chọn sẵn. Đừng đăng gói lên chỗ công khai.',
+  });
+  if (!picked) return;
+  const ids = picked.filter(x => x !== '@standards');
+  const q = new URLSearchParams({ ids: ids.join(','), standards: picked.includes('@standards') });
+  // Tải qua thẻ <a> để trình duyệt tự lưu file (server chỉ báo lỗi khi không chọn gì — pickList đã chặn trường hợp đó)
+  const a = h('a', { href: '/api/kit/package?' + q, download: '' });
+  document.body.append(a); a.click(); a.remove();
+  toast(`Đang tải gói ${ids.length} mục${picked.includes('@standards') ? ' + standards/' : ''}`);
+}
+
+/** Nhập gói .zip vào bộ cài (claude-kit/ + standards/), sau đó cài như thường. */
+async function kitImport(file) {
+  if (!file) return;
+  if (!await ask(`Nhập gói ${file.name} vào bộ cài?\nSkill/agent trùng tên trong bộ cài sẽ được thay (bản cũ sao lưu vào data/kit-backup). Bản đã cài trong ~/.claude chưa bị đụng — nhập xong bấm "Cài mục còn thiếu" hoặc "Cài đè".`, { ok: 'Nhập' })) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await api('/kit/package', { method: 'POST', body: fd });
+    toast(`Đã nhập ${r.done.length} mục${r.standards.length ? ` + ${r.standards.length} file standards` : ''}` + (r.backup ? ` — bản cũ ở ${r.backup}` : ''));
   } catch (e) { toast(e.message, true); }
   loadKit();
 }
@@ -4090,6 +4147,9 @@ function wire() {
   });
   $('#btnKitInstall').addEventListener('click', () => kitInstall(null, false));
   $('#btnKitUpdate').addEventListener('click', () => kitInstall(null, true));
+  $('#btnKitPack').addEventListener('click', kitPackage);
+  $('#btnKitImport').addEventListener('click', () => $('#kitImportFile').click());
+  $('#kitImportFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; kitImport(f); });
   for (const b of $$('#costDays button')) b.addEventListener('click', () => { COSTS.days = Number(b.dataset.v); try { localStorage.setItem('costDays', b.dataset.v); } catch { } loadCosts(); });
   for (const b of $$('#costPaid button')) b.addEventListener('click', () => { COSTS.paid = b.dataset.v; loadCosts(); });
   for (const b of $$('#costTabs button')) b.addEventListener('click', () => { COSTS.tab = b.dataset.v; try { localStorage.setItem('costTab', b.dataset.v); } catch { } renderCostsView(); });
